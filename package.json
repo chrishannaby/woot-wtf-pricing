@@ -1,0 +1,16 @@
+{
+  "name": "woot-wtf-pricing",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@shopify/admin-api-client": "^1.0.0",
+    "dotenv": "^16.4.5"
+  }
+}
