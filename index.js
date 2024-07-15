@@ -239,7 +239,7 @@ async function incrementVariantPrice(variant) {
 async function main() {
   while (true) {
     await fetchAndProcessDeals();
-    await new Promise((resolve) => setTimeout(resolve, 1000)); // 30 second sleep
+    await new Promise((resolve) => setTimeout(resolve, 30000)); // 30 second sleep
   }
 }
 
