@@ -3,6 +3,9 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+const priceIncrement = 9.99;
+const dealDuration = 1000;
+
 const client = createAdminApiClient({
   storeDomain: process.env.SHOPIFY_STORE_DOMAIN,
   apiVersion: "2024-10",
@@ -20,25 +23,6 @@ const FETCH_DEALS_QUERY = `
             value
           }
         }
-      }
-    }
-  }
-`;
-
-const UPDATE_DEAL_MUTATION = `
-  mutation UpdateMetaobject($id: ID!, $metaobject: MetaobjectUpdateInput!) {
-    metaobjectUpdate(id: $id, metaobject: $metaobject) {
-      metaobject {
-        id
-        fields {
-          key
-          value
-        }
-      }
-      userErrors {
-        field
-        message
-        code
       }
     }
   }
@@ -77,7 +61,7 @@ const UPDATE_PRODUCT_VARIANT_MUTATION = `
   }
 `;
 
-const trackedDeals = new Set();
+const trackedDeals = {};
 
 async function fetchAndProcessDeals() {
   try {
@@ -89,6 +73,7 @@ async function fetchAndProcessDeals() {
     }
 
     const deals = data.metaobjects.edges;
+    console.log(`Fetched ${deals.length} deals.`);
 
     for (const deal of deals) {
       const fields = deal.node.fields.reduce((acc, field) => {
@@ -99,62 +84,25 @@ async function fetchAndProcessDeals() {
       if (
         fields.wtf_pricing === "true" &&
         new Date(fields.start_time) <= new Date() &&
-        fields.wtf_pricing_started !== "true" &&
-        !trackedDeals.has(deal.node.id)
+        !(deal.node.id in trackedDeals)
       ) {
-        await updateDeal(deal.node.id);
-        trackedDeals.add(deal.node.id);
-        console.log(`Deal ${deal.node.id} updated and added to tracked deals.`);
+        trackedDeals[deal.node.id] = false;
+        console.log(`Deal ${deal.node.id} added to tracked deals.`);
       }
 
-      if (trackedDeals.has(deal.node.id)) {
+      if (deal.node.id in trackedDeals && !trackedDeals[deal.node.id]) {
         const isDealComplete = await adjustProductPrices(
           fields.product,
           deal.node.id
         );
         if (isDealComplete) {
-          trackedDeals.delete(deal.node.id);
-          console.log(
-            `Deal ${deal.node.id} completed and removed from tracked deals.`
-          );
+          trackedDeals[deal.node.id] = true;
+          console.log(`Deal ${deal.node.id} completed.`);
         }
       }
     }
   } catch (error) {
     console.error("Error fetching or processing deals:", error);
-  }
-}
-
-async function updateDeal(id) {
-  try {
-    const variables = {
-      id: id,
-      metaobject: {
-        fields: [
-          {
-            key: "wtf_pricing_started",
-            value: "true",
-          },
-        ],
-      },
-    };
-
-    const { data, errors } = await client.request(UPDATE_DEAL_MUTATION, {
-      variables: variables,
-    });
-
-    if (errors) {
-      console.error("GraphQL errors:", errors);
-      return;
-    }
-
-    if (data.metaobjectUpdate.userErrors.length > 0) {
-      console.error("Error updating deal:", data.metaobjectUpdate.userErrors);
-    } else {
-      console.log(`Successfully updated deal ${id}`);
-    }
-  } catch (error) {
-    console.error("Error updating deal:", error);
   }
 }
 
@@ -194,9 +142,9 @@ async function incrementVariantPrice(variant) {
   if (currentPrice < compareAtPrice) {
     const priceDifference = compareAtPrice - currentPrice;
     const newPrice =
-      priceDifference < 10
+      priceDifference < priceIncrement
         ? compareAtPrice
-        : Math.min(currentPrice + 10, compareAtPrice);
+        : Math.min(currentPrice + priceIncrement, compareAtPrice);
 
     try {
       const { data, errors } = await client.request(
@@ -239,7 +187,7 @@ async function incrementVariantPrice(variant) {
 async function main() {
   while (true) {
     await fetchAndProcessDeals();
-    await new Promise((resolve) => setTimeout(resolve, 30000)); // 30 second sleep
+    await new Promise((resolve) => setTimeout(resolve, dealDuration));
   }
 }
 
